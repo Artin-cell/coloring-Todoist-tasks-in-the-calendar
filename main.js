@@ -1,3 +1,16 @@
+/**
+ * Todoist → Google Calendar Color Sync
+ * 
+ * Fetches tasks from specified Todoist sections and colorizes
+ * matching Google Calendar events accordingly.
+ * 
+ * Setup:
+ * 1. Replace YOUR_TODOIST_API_TOKEN with your Todoist API token
+ * 2. Replace YOUR_ID_CAL with your Google Calendar ID
+ * 3. Replace SECTION_ID_* with your Todoist section IDs
+ * 4. Set desired color IDs (see color reference above)
+ */
+
 const CONFIG = { 
   todoist: {
     apiToken: 'YOUR_TODOIST_API_TOKEN',
@@ -17,187 +30,111 @@ const CONFIG = {
   }
 };
 
-const CALENDAR_COLORS = {
-  '1': 'Лавандовый',
-  '2': 'Шалфейный', 
-  '3': 'Виноградный',
-  '4': 'Фламинго',
-  '5': 'Банан',
-  '6': 'Мандарин',
-  '7': 'Голубой',
-  '8': 'Графит',
-  '9': 'Черника',
-  '10': 'Базилик',
-  '11': 'Томат'
-};
-
+/**
+  '1': 'Lavender',
+  '2': 'Sage',
+  '3': 'Grape',
+  '4': 'Flamingo',
+  '5': 'Banana',
+  '6': 'Tangerine',
+  '7': 'Peacock',
+  '8': 'Graphite',
+  '9': 'Blueberry',
+  '10': 'Basil',
+  '11': 'Tomato'
+*/
 
 function doGet() {
-  console.log("=== doGet START ===");
-
   try {
-    const result = updateEventColorsBasedOnTodoistSections();
-
-    console.log("=== doGet SUCCESS ===");
-
+    const result = updateEventColors();
     return ContentService
-      .createTextOutput(JSON.stringify({
-        success: true,
-        message: result,
-        timestamp: new Date().toISOString()
-      }))
+      .createTextOutput(JSON.stringify({ success: true, message: result, timestamp: new Date().toISOString() }))
       .setMimeType(ContentService.MimeType.JSON);
-
   } catch (error) {
-    console.log("ERROR in doGet:", error);
-
     return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        error: error.toString(),
-        timestamp: new Date().toISOString()
-      }))
+      .createTextOutput(JSON.stringify({ success: false, error: error.toString(), timestamp: new Date().toISOString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-
-function updateEventColorsBasedOnTodoistSections() {
-  console.log("1️⃣ Получаем календарь");
-
+function updateEventColors() {
+  // 1. Get calendar and events
   const calendar = CalendarApp.getCalendarById(CONFIG.calendar.id);
-  if (!calendar) throw new Error('Календарь не найден');
-
-  console.log("Календарь найден:", CONFIG.calendar.id);
-
+  if (!calendar) throw new Error('Calendar not found');
   const now = new Date();
   now.setDate(now.getDate() - 5);
-
   const future = new Date();
-  future.setDate(now.getDate() + 30);
-
-  console.log("2️⃣ Диапазон дат:", now, "→", future);
-
+  future.setDate(future.getDate() + 30);
   const events = calendar.getEvents(now, future);
-  console.log("3️⃣ Найдено событий:", events.length);
-
-  console.log("4️⃣ Получаем задачи из Todoist");
-  const todoistTasks = getTodoistTasks();
-  console.log("Получено задач:", todoistTasks.length);
-
-  console.log("5️⃣ Создаем карту соответствий");
-  const taskSectionMap = createTaskSectionMap(todoistTasks);
-  console.log("Карта создана. Размер:", Object.keys(taskSectionMap).length);
-
+  console.log('Events found in calendar:', events.length);
+  // 2. Build map: event title → color
+  // Iterate over each section and fetch its tasks
+  const titleColorMap = {};
+  for (const [sectionId, colorId] of Object.entries(CONFIG.sectionColors)) {
+    console.log(`Fetching tasks for section ${sectionId} → color ${colorId}`);
+    const tasks = getTasksBySection(sectionId);
+    console.log(`  Tasks received: ${tasks.length}`);
+    tasks.forEach(task => {
+      titleColorMap[task.content] = colorId;
+      console.log(`  Task: "${task.content}" → color ${colorId}`);
+    });
+  }
+  console.log('Total tasks in map:', Object.keys(titleColorMap).length);
+  // 3. Colorize events
   let updatedCount = 0;
+  let skippedCount = 0;
   let notFoundCount = 0;
-
-  console.log("6️⃣ Начинаем обработку событий");
-
   events.forEach(event => {
-    const eventTitle = event.getTitle();
-    console.log("Проверяем событие:", eventTitle);
-
-    const sectionId = findSectionForTask(eventTitle, taskSectionMap);
-
-    if (sectionId) {
-      console.log("Найден sectionId:", sectionId);
-
-      if (CONFIG.sectionColors[sectionId]) {
-        const targetColorId = CONFIG.sectionColors[sectionId];
-        console.log("Целевой цвет:", targetColorId, CALENDAR_COLORS[targetColorId]);
-
-        const currentColorId = event.getColor();
-        console.log("Текущий цвет:", currentColorId);
-
-        if (currentColorId !== targetColorId) {
-          event.setColor(targetColorId);
-          console.log("✓ Цвет обновлен");
-          updatedCount++;
-        } else {
-          console.log("= Цвет уже правильный");
-        }
-
+    const title = event.getTitle();
+    const targetColor = findColorForEvent(title, titleColorMap);
+    if (targetColor) {
+      const currentColor = event.getColor();
+      if (currentColor !== targetColor) {
+        event.setColor(targetColor);
+        console.log(`✓ Updated: "${title}" → color ${targetColor}`);
+        updatedCount++;
       } else {
-        console.log("⚠ Нет соответствия цвета для sectionId:", sectionId);
-        notFoundCount++;
+        skippedCount++;
       }
-
     } else {
-      console.log("✗ Раздел не найден для события");
       notFoundCount++;
     }
   });
-
-  console.log("=== РЕЗУЛЬТАТ ===");
-  console.log("Всего событий:", events.length);
-  console.log("Обновлено:", updatedCount);
-  console.log("Без соответствий:", notFoundCount);
-
-  return `Всего событий: ${events.length}, обновлено: ${updatedCount}, без соответствий: ${notFoundCount}`;
+  const result = `Total events: ${events.length}, updated: ${updatedCount}, already correct color: ${skippedCount}, no match found: ${notFoundCount}`;
+  console.log(result);
+  return result;
 }
-
-
-// Новый API Todoist
-function getTodoistTasks() {
-  const url = CONFIG.todoist.baseUrl + '/tasks';
-
-  console.log("Запрос к Todoist:", url);
-
-  const response = UrlFetchApp.fetch(url, {
-    method: 'get',
-    headers: {
-      Authorization: 'Bearer ' + CONFIG.todoist.apiToken
-    },
-    muteHttpExceptions: true
-  });
-
-  console.log("Ответ Todoist. Код:", response.getResponseCode());
-
-  if (response.getResponseCode() !== 200) {
-    console.log("Ошибка ответа:", response.getContentText());
-    throw new Error('Todoist API error: ' + response.getContentText());
-  }
-
-  const data = JSON.parse(response.getContentText());
-  console.log("Данные получены");
-
-  return data.results || [];
-}
-
-
-function createTaskSectionMap(tasks) {
-  console.log("Создаем карту задач → разделов");
-
-  const map = {};
-
-  tasks.forEach(task => {
-    console.log("Задача:", task.content, "| section_id:", task.section_id);
-
-    if (task.section_id) {
-      map[task.content] = task.section_id.toString();
+// Fetch all tasks in a section (with pagination)
+function getTasksBySection(sectionId) {
+  const baseUrl = CONFIG.todoist.baseUrl + '/tasks?section_id=' + sectionId;
+  let allTasks = [];
+  let cursor = null;
+  do {
+    const url = cursor ? baseUrl + '&cursor=' + cursor : baseUrl;
+    const response = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { Authorization: 'Bearer ' + CONFIG.todoist.apiToken },
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) {
+      console.log('Todoist API error:', response.getContentText());
+      break;
     }
-  });
-
-  return map;
+    const data = JSON.parse(response.getContentText());
+    allTasks = allTasks.concat(data.results || []);
+    cursor = data.nextCursor || null;
+  } while (cursor !== null);
+  return allTasks;
 }
-
-
-function findSectionForTask(eventTitle, taskSectionMap) {
-  console.log("Ищем раздел для:", eventTitle);
-
-  if (taskSectionMap[eventTitle]) {
-    console.log("✓ Прямое совпадение");
-    return taskSectionMap[eventTitle];
+// Find color for an event (exact match first, then partial)
+function findColorForEvent(eventTitle, titleColorMap) {
+  if (titleColorMap[eventTitle]) {
+    return titleColorMap[eventTitle];
   }
-
-  for (const [taskName, sectionId] of Object.entries(taskSectionMap)) {
+  for (const [taskName, colorId] of Object.entries(titleColorMap)) {
     if (eventTitle.includes(taskName) || taskName.includes(eventTitle)) {
-      console.log("✓ Частичное совпадение:", taskName);
-      return sectionId;
+      return colorId;
     }
   }
-
-  console.log("✗ Совпадение не найдено");
   return null;
 }
