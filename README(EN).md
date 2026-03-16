@@ -1,3 +1,4 @@
+
 <div align="center">
 
 <a href="https://github.com/Artin-cell/coloring-Todoist-tasks-in-the-calendar/blob/main/README.md">
@@ -35,8 +36,7 @@ Automatically colors Google Calendar events based on Todoist task sections. Proj
 const CONFIG = {
   todoist: {
     apiToken: 'YOUR_TOKEN_HERE' // ← Paste here
-  },
-  // ... rest of configuration
+  }
 }
 ```
 
@@ -59,26 +59,26 @@ calendar: {
 4. Copy section IDs like: `"Work" -> ID: 123456789`
 
 ### 4. Configure Color Mapping
-In `main.gs` replace examples with your sections:
+In `main.gs` replace example placeholders with your real section IDs:
 ```javascript
 sectionColors: {
-  '123456789': '7',  // Work → Blue
+  '123456789': '7',  // Work → Peacock
   '987654321': '1',  // Personal → Lavender
-  '456789123': '5'   // Projects → Tangerine
+  '456789123': '5'   // Projects → Banana
 }
 ```
 
 ## 🎨 Google Calendar Color Palette
 
-| ID | Color | Description |
-|----|-------|-------------|
+| ID | Color | Name |
+|----|-------|------|
 | 1 | 🟣 | Lavender |
 | 2 | 🟢 | Sage |
 | 3 | 🟣 | Grape |
 | 4 | 🔴 | Flamingo |
 | 5 | 🟡 | Banana |
 | 6 | 🟠 | Tangerine |
-| 7 | 🔵 | Blue |
+| 7 | 🔵 | Peacock |
 | 8 | ⚫ | Graphite |
 | 9 | 🔵 | Blueberry |
 | 10 | 🟢 | Basil |
@@ -95,7 +95,7 @@ sectionColors: {
 ### Time-driven Trigger
 1. In Apps Script editor: ⏰ **Triggers** → **Add trigger**
 2. Settings:
-   - **Function:** `updateEventColorsBasedOnTodoistSections`
+   - **Function:** `updateEventColors`
    - **Deployment:** Head
    - **Event:** Time-driven
    - **Type:** Daily/Hourly
@@ -103,24 +103,41 @@ sectionColors: {
 
 ## 🔧 Functions
 
-### `doGet()` - Web Interface
-- Manual synchronization trigger
-- Returns JSON with result
+### `doGet()` — Web Interface
+- Manual synchronization trigger via HTTP GET request
+- Returns JSON with execution result
 - URL: `https://script.google.com/.../exec`
 
-### `updateEventColorsBasedOnTodoistSections()` - Main Sync
-- Fetches tasks from Todoist
-- Fetches events from Google Calendar
-- Matches and updates colors
-- Works with events 30 days ahead
+### `updateEventColors()` — Main Sync
+- Fetches tasks from Todoist **per section** (not all at once)
+- Fetches calendar events for the range: 5 days ago → 30 days ahead
+- Builds a task title → color map
+- Updates event colors only when they differ from the target
+- Supports pagination — handles sections with more than 50 tasks
 
-### `printTodoistSections()` - Debugging
-- Prints all Todoist sections to console
-- Helps get IDs for configuration
+### `getTasksBySection(sectionId)` — Todoist Fetcher
+- Fetches all tasks for a given section ID
+- Handles Todoist API pagination via `nextCursor`
 
-### `checkCurrentEventColors()` - Verification
-- Shows current event colors
-- Useful for debugging
+### `findColorForEvent(eventTitle, titleColorMap)` — Matcher
+- First tries exact match between event title and task name
+- Falls back to partial match (one contains the other)
+
+### `printTodoistSections()` — Setup Helper
+- Prints all your Todoist sections with IDs to the console
+- Use this to get IDs for `sectionColors` config
+
+## 📊 How It Works
+
+1. **Fetch events** from Google Calendar (5 days ago → 30 days ahead)
+
+2. **Fetch tasks per section** — for each section ID defined in `sectionColors`, the script requests only tasks from that section via `/tasks?section_id=...`
+
+3. **Build a map** of task titles → color IDs
+
+4. **Match & colorize** — for each calendar event, find a matching task by title (exact or partial) and apply the corresponding color
+
+5. **Skip unchanged** — if the event already has the correct color, it is not updated
 
 ## 🐛 Debugging & Logging
 
@@ -128,37 +145,21 @@ sectionColors: {
 1. In Apps Script editor
 2. **Execution log** (🐞 → Logs)
 3. Logs show:
-   - Number of found events
-   - Number of updated colors
-   - Matching errors
-   - Execution status
+   - Number of events found
+   - Tasks fetched per section
+   - Updated / skipped / unmatched counts
 
 ### Common Errors
 ```
-❌ Todoist API token not found
-→ Check CONFIG.todoist.apiToken in main.gs
-
 ❌ Calendar not found
-→ Check CONFIG.calendar.id
+→ Check CONFIG.calendar.id in main.gs
 
-? Section not found for: "Event Name"
-→ Add mapping to sectionColors
+❌ Todoist API error
+→ Check CONFIG.todoist.apiToken
+
+? No match found for: "Event Name"
+→ Make sure a Todoist task with the same name exists in one of the configured sections
 ```
-
-## 📊 How It Works
-
-1. **Data Collection:**
-   - Tasks from Todoist (all active)
-   - Events from Google Calendar (next 30 days)
-
-2. **Matching:**
-   - Compares event and task names
-   - Looks for exact and partial matches
-
-3. **Updating:**
-   - Finds color for Todoist section
-   - Applies color to calendar event
-   - Only if color is different
 
 ## 🔒 Security
 
@@ -166,7 +167,7 @@ sectionColors: {
 
 Best practices:
 1. Keep real tokens only in your local copy
-2. For GitHub use example file with placeholders
+2. For GitHub use the example file with placeholders
 3. Use `.gitignore` for files with sensitive data
 
 ## 🤝 Contributing
@@ -179,8 +180,9 @@ Best practices:
 
 ---
 
-## 📞 Support / Поддержка
+## 📞 Support
 
-**Issues:** [GitHub Issues](https://github.com/yourusername/todoist-calendar-sync/issues)
+**Issues:** [GitHub Issues](https://github.com/Artin-cell/coloring-Todoist-tasks-in-the-calendar/issues)
 
-**⭐ If you find this useful, please star the repository! / ⭐ Если проект полезен, поставьте звезду!**
+**⭐ If you find this useful, please star the repository!**
+
